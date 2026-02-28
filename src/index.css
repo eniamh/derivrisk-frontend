@@ -1,0 +1,13 @@
+
+@import "tailwindcss";
+
+/* Very minimal reset – optional but popular */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
