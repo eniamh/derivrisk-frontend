@@ -21,8 +21,8 @@ interface StatsPoint {
 }
 
 function App() {
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://85.91.16.21:5053';
-  //const API_BASE = 'http://localhost:5053';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5053';
+  
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
