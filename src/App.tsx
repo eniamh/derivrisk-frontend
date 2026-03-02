@@ -29,6 +29,11 @@ function App() {
   // Model selection
   const [modelType, setModelType] = useState<'gbm' | 'ou'>('gbm');
 
+  //FX Forward parameters
+  const [strike, setStrike] = useState(1.10);           // K – fixed forward rate
+  const [notional, setNotional] = useState(1000000);    // amount in foreign currency
+  const [direction, setDirection] = useState<'buy' | 'sell'>('buy');  // buy = receive foreign, sell = receive domestic
+
   // Shared parameters
   const [maturity, setMaturity] = useState(1.0);
   const [r_dom, setR_dom] = useState(0.03);
@@ -85,12 +90,13 @@ function App() {
 
         let url = `${API_BASE}/api/simulation/fx-forward-paths?`;
         url += `model=${modelType}&paths=200&steps=200&maturity=${maturity}`;
-        url += `&r_dom=${r_dom}&r_for=${r_for}&spot=${currentSpot.toFixed(4)}`;
+        url += `&r_dom=${r_dom}&r_for=${r_for}&spot=${currentSpot.toFixed(6)}`;
+        url += `&strike=${strike.toFixed(6)}&notional=${notional}&direction=${direction}`;
 
         if (modelType === 'gbm') {
-          url += `&sigma_gbm=${currentVol.toFixed(4)}`;
+          url += `&sigma_gbm=${currentVol.toFixed(6)}`;
         } else {
-          url += `&sigma_ou=${currentVol.toFixed(4)}&kappa=${ouKappa}&theta=${ouTheta}`;
+          url += `&sigma_ou=${currentVol.toFixed(6)}&kappa=${ouKappa}&theta=${ouTheta}`;
         }
 
         const res = await fetch(url);
@@ -130,57 +136,76 @@ function App() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-10 text-gray-800">
-          FX Forward Sensitivity Analysis
+          FX Forward Exposure
         </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Controls panel */}
           <div className="bg-white p-6 rounded-xl shadow h-fit">
-            <h2 className="text-xl font-semibold mb-6">Controls</h2>
 
-            {/* Model */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Simulation Model
-              </label>
-              <select
-                value={modelType}
-                onChange={(e) => setModelType(e.target.value as 'gbm' | 'ou')}
-                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="gbm">Geometric Brownian Motion</option>
-                <option value="ou">Ornstein-Uhlenbeck</option>
-              </select>
-            </div>
-
-            {/* ShockParam */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Parameter to shock
-              </label>
-              <div className="flex gap-6">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="shockParam"
-                    value="spot"
-                    checked={shockParam === 'spot'}
-                    onChange={() => setShockParam('spot')}
-                    className="mr-2"
-                  />
-                  Spot price
+            {/* FX Forward contract */}
+            <div className="mb-6 space-y-4">
+              <h3 className="text-lg font-medium">FX Forward Contract</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Strike (fixed rate at maturity)
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="shockParam"
-                    value="vol"
-                    checked={shockParam === 'vol'}
-                    onChange={() => setShockParam('vol')}
-                    className="mr-2"
-                  />
-                  Volatility
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={strike}
+                  onChange={(e) => setStrike(Number(e.target.value))}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notional (foreign currency amount)
                 </label>
+                <input
+                  type="text"
+                  value={notional.toLocaleString('en-US')}  // adds commas: 1000000 → "1,000,000"
+                  onChange={(e) => {
+                    // Remove commas and non-digits, convert to number
+                    const rawValue = e.target.value.replace(/[^0-9]/g, '');
+                    const newNotional = rawValue === '' ? 0 : Number(rawValue);
+                    setNotional(newNotional);
+                  }}
+                  placeholder="1,000,000"
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Direction
+                </label>
+                <div className="flex gap-6">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="direction"
+                      value="buy"
+                      checked={direction === 'buy'}
+                      onChange={() => setDirection('buy')}
+                      className="mr-2"
+                    />
+                    Buy foreign
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="direction"
+                      value="sell"
+                      checked={direction === 'sell'}
+                      onChange={() => setDirection('sell')}
+                      className="mr-2"
+                    />
+                    Sell foreign
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -222,6 +247,50 @@ function App() {
                   onChange={(e) => setR_for(Number(e.target.value))}
                   className="w-full border rounded p-2"
                 />
+              </div>
+            </div>
+
+            {/* Model */}
+            <div className="mb-6">
+              <h3 className="text-lg font-medium">Simulation Model for FX spot</h3>
+              <select
+                value={modelType}
+                onChange={(e) => setModelType(e.target.value as 'gbm' | 'ou')}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="gbm">Geometric Brownian Motion</option>
+                <option value="ou">Ornstein-Uhlenbeck</option>
+              </select>
+            </div>
+
+            {/* ShockParam */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Parameter to shock
+              </label>
+              <div className="flex gap-6">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="shockParam"
+                    value="spot"
+                    checked={shockParam === 'spot'}
+                    onChange={() => setShockParam('spot')}
+                    className="mr-2"
+                  />
+                  Spot price
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="shockParam"
+                    value="vol"
+                    checked={shockParam === 'vol'}
+                    onChange={() => setShockParam('vol')}
+                    className="mr-2"
+                  />
+                  Volatility
+                </label>
               </div>
             </div>
 
@@ -350,10 +419,10 @@ function App() {
             {/* Underlying FX Spot Chart */}
             <div className="bg-white p-6 rounded-xl shadow">
               <h2 className="text-xl font-semibold mb-4 text-center">
-                Underlying FX Spot – Sensitivity
+                Underlying FX Spot
               </h2>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <ResponsiveContainer width="100%" height={450}>
+                <LineChart margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     type="number"
@@ -361,8 +430,8 @@ function App() {
                     label={{ value: 'Time (years)', position: 'insideBottom', offset: -5 }}
                   />
                   <YAxis label={{ value: 'FX Rate', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip formatter={(v: number | undefined) => v?.toFixed(4) ?? '–'} />
-                  <Legend verticalAlign="top" height={36} iconType="plainline" />
+                  <Legend verticalAlign="top" height={70} iconType="plainline" />
+                  
 
                   {scenarios.map((label, i) => {
                     const color = colors[i];
@@ -408,10 +477,10 @@ function App() {
             {/* PV Chart */}
             <div className="bg-white p-6 rounded-xl shadow">
               <h2 className="text-xl font-semibold mb-4 text-center">
-                PV of FX Forward – Sensitivity
+                PV of FX Forward
               </h2>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <ResponsiveContainer width="100%" height={450}>
+                <LineChart margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     type="number"
@@ -419,8 +488,7 @@ function App() {
                     label={{ value: 'Time (years)', position: 'insideBottom', offset: -5 }}
                   />
                   <YAxis label={{ value: 'Present Value', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip formatter={(v: number | undefined) => v?.toFixed(4) ?? '–'} />
-                  <Legend verticalAlign="top" height={36} iconType="plainline" />
+                  <Legend verticalAlign="top" height={70} iconType="plainline" />
 
                   {scenarios.map((label, i) => {
                     const color = colors[i];
@@ -462,7 +530,10 @@ function App() {
                 </LineChart>
               </ResponsiveContainer>
               <p className="text-center text-sm text-gray-500 mt-3">
-                PV starts near 0 (fair forward at inception) — sensitivity shows impact of shocks
+                Plots show the impact of the selected shock applied to{' '}
+                <span className="font-medium">
+                  {shockParam === 'spot' ? 'initial FX Spot' : 'volatility'}
+                </span>
               </p>
             </div>
           </div>
