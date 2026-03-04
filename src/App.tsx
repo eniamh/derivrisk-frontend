@@ -1,5 +1,5 @@
 // src/App.tsx
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useState } from 'react';
 import {
   LineChart,
@@ -8,7 +8,11 @@ import {
   YAxis,
   CartesianGrid,
   Legend,
+  Tooltip,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  ComposedChart,
 } from 'recharts';
 
 interface StatsPoint {
@@ -18,6 +22,58 @@ interface StatsPoint {
   p95: number;
   scenario: string; // "Down -20%", "Base 0%", "Up +20%"
 }
+
+
+// Helper to generate smooth theoretical density points for plotting
+const generateDensityCurve = (
+  dist: { type: 'lognormal' | 'normal'; mu?: number; sigma?: number; mean?: number; std?: number },
+  prices: number[],
+  numPoints = 200
+) => {
+  if (!dist) return [];
+
+  const min = Math.min(...prices) * 0.8;
+  const max = Math.max(...prices) * 1.2;
+  const step = (max - min) / numPoints;
+  const points = [];
+
+  for (let x = min; x <= max; x += step) {
+    let density = 0;
+    if (dist.type === 'lognormal' && dist.mu !== undefined && dist.sigma !== undefined) {
+      if (x <= 0) continue; // lognormal undefined for x <= 0
+      const logX = Math.log(x);
+      density =
+        (1 / (dist.sigma * x * Math.sqrt(2 * Math.PI))) *
+        Math.exp(-0.5 * Math.pow((logX - dist.mu) / dist.sigma, 2));
+    } else if (dist.type === 'normal' && dist.mean !== undefined && dist.std !== undefined) {
+      density =
+        (1 / (dist.std * Math.sqrt(2 * Math.PI))) *
+        Math.exp(-0.5 * Math.pow((x - dist.mean) / dist.std, 2));
+    }
+    points.push({ x, density });
+  }
+  return points;
+};
+
+const binTerminalPrices = (prices: number[], numBins = 30) => {
+  if (prices.length === 0) return [];
+
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const binWidth = (max - min) / numBins;
+  const bins = new Array(numBins).fill(0);
+
+  prices.forEach(price => {
+    let binIndex = Math.floor((price - min) / binWidth);
+    binIndex = Math.min(binIndex, numBins - 1); // clamp
+    bins[binIndex]++;
+  });
+
+  return bins.map((count, i) => ({
+    binCenter: min + (i + 0.5) * binWidth,
+    count,
+  }));
+};
 
 function App() {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5053';
@@ -57,11 +113,22 @@ function App() {
   const [underlyingStats, setUnderlyingStats] = useState<StatsPoint[]>([]);
   const [pvStats, setPvStats] = useState<StatsPoint[]>([]);
 
+  // Simulated distribution  
+  const [mcTerminalPrices, setMcTerminalPrices] = useState<number[][]>([]); // [scenario][path] at maturity
+  const [theoreticalDist, setTheoreticalDist] = useState<any>(null); // { type: 'lognormal' or 'normal', mu, sigma }
+
+  const binnedData = useMemo(
+    () => binTerminalPrices(mcTerminalPrices[1] || [], 30),
+    [mcTerminalPrices]
+  );
+
   const runSensitivity = async () => {
     setLoading(true);
     setErrorMsg(null);
     setUnderlyingStats([]);
     setPvStats([]);
+    setMcTerminalPrices([]);
+    setTheoreticalDist(null);
 
     try {
       const baseSpot = modelType === 'gbm' ? gbmSpot : ouSpot;
@@ -81,6 +148,7 @@ function App() {
 
       const allUnderlying: StatsPoint[] = [];
       const allPv: StatsPoint[] = [];
+      const terminalPricesPerScenario = [];
 
       for (let i = 0; i < 3; i++) {
         const factor = shiftFactors[i];
@@ -116,20 +184,75 @@ function App() {
 
         allUnderlying.push(...underlyingTagged);
         allPv.push(...pvTagged);
+
+        const scenarioData = data; // from Promise.all fetch
+        const terminal = scenarioData.underlyingPaths.map((path: any) => path[path.length - 1]);
+        terminalPricesPerScenario.push(terminal);
       }
 
       setUnderlyingStats(allUnderlying);
       setPvStats(allPv);
+      setMcTerminalPrices(terminalPricesPerScenario);
+
+      // Compute theoretical params (for base case only – or per scenario if you want)
+      const riskNeutralDrift = r_dom - r_for;
+
+      let theo;
+      if (modelType === 'gbm') {
+        // Lognormal: ln(S_T) ~ Normal(mu = ln(S0) + (r-q - σ²/2)T, σ√T)
+        const mu = Math.log(baseSpot) + (riskNeutralDrift - 0.5 * baseVol ** 2) * maturity;
+        const sigma = baseVol * Math.sqrt(maturity);
+        theo = { type: 'lognormal', mu, sigma };
+      } else {
+        // OU: Normal(mean = θ + (S0 - θ)e^(-κT), variance = (σ²/(2κ))(1 - e^(-2κT)))
+        const expDecay = Math.exp(-ouKappa * maturity);
+        const mean = ouTheta + (baseSpot - ouTheta) * expDecay;
+        const variance = (ouSigma ** 2 / (2 * ouKappa)) * (1 - Math.exp(-2 * ouKappa * maturity));
+        theo = { type: 'normal', mean, std: Math.sqrt(variance) };
+      }
+      setTheoreticalDist(theo);
+
+      console.log('base scenario terminal prices:', mcTerminalPrices?.[1]);
+      console.log('formatted data for bars:', mcTerminalPrices?.[1]?.map(price => ({ value: price })) || []);
+      console.log('binnedData:', binTerminalPrices(mcTerminalPrices[1] || [], 30));
+      console.log('density curve points:', generateDensityCurve(theoreticalDist, mcTerminalPrices[1]) || []);
+
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to run sensitivity');
       console.error(err);
     } finally {
       setLoading(false);
     }
+
+    
+
   };
 
   const scenarios = ['Down', 'Base', 'Up'];
   const colors = ['#ef4444', '#3b82f6', '#10b981']; // red, blue, green
+
+  const densityData = useMemo(() => {
+    if (!theoreticalDist) return [];
+    if (!mcTerminalPrices || !Array.isArray(mcTerminalPrices[1]) || mcTerminalPrices[1].length === 0) {
+      return [];
+    }
+
+    return generateDensityCurve(theoreticalDist, mcTerminalPrices[1]);
+  }, [theoreticalDist, mcTerminalPrices]);
+
+
+  const mergedData = binnedData.map(bin => {
+    // Find closest density point or interpolate if needed
+    const closestDensity = densityData.reduce((prev, curr) =>
+      Math.abs(curr.x - bin.binCenter) < Math.abs(prev.x - bin.binCenter) ? curr : prev
+    );
+    return {
+      binCenter: bin.binCenter,
+      count: bin.count,
+      density: closestDensity?.density ?? 0,  
+    };
+  });
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -534,6 +657,97 @@ function App() {
                   {shockParam === 'spot' ? 'initial FX Spot' : 'volatility'}
                 </span>
               </p>
+            </div>
+
+            {/* Comparison of realised and theoretical distributions */}
+            <div className="bg-white p-6 rounded-xl shadow">
+              <h2 className="text-xl font-semibold mb-4 text-center">
+                FX Spot at Maturity: MC vs Theoretical Distribution (Base Scenario)
+              </h2>
+
+              {/* Debug count */}
+              <p className="text-center text-sm text-gray-600 mb-4">
+                {mcTerminalPrices[1]?.length || 0} terminal prices in base scenario
+              </p>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart
+                  data={mergedData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+
+                  <XAxis
+                    dataKey="binCenter"
+                    type="number"
+                    // Remove scale="band" — let it be continuous numeric
+                    domain={['dataMin', 'dataMax']}           // Ensures full range coverage
+                    padding={{ left: 30, right: 30 }}          // ← Key: Adds space on edges so first/last bars aren't cut off + gives room for all bars
+                    tickCount={10}                             // Optional: nicer tick spacing
+                    // tickFormatter={(val) => val.toFixed(2)} // Optional: clean up labels if too many decimals
+                  />
+
+                  <YAxis yAxisId="left" orientation="left" label={{ value: 'Frequency', angle: -90, position: 'insideLeft' }} />
+                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Density', angle: 90, position: 'insideRight' }} />
+
+                  <Bar
+                    yAxisId="left"
+                    dataKey="count"
+                    fill="#8884d8"
+                    barSize={Math.max(4, (window.innerWidth * 0.8) / mergedData.length / 2)}  // Dynamic: ~half the available slot per bin
+                    // or fixed: barSize={12}  // Start with 8–20 px, adjust based on bin count (30 bins → ~10–15 px good)
+                    minPointSize={2}           // Ensures tiny counts (e.g. 1–2) are still visible
+                    isAnimationActive={false}
+                  />
+
+                  {/* Your Line remains the same */}
+                  {theoreticalDist && mcTerminalPrices?.[1]?.length > 0 && (
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="density"
+                      name="Theoretical Density"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={false}
+                      strokeDasharray="5 5"
+                      isAnimationActive={false}
+                    />
+                  )}
+
+                  <Tooltip />
+                  <Legend />
+                </ComposedChart>
+              </ResponsiveContainer>
+
+              {/* Text panel */}
+              <div className="mt-6 p-4 bg-gray-50 border rounded-lg">
+                <h3 className="text-lg font-medium mb-2">Theoretical Distribution at Maturity (Base Case)</h3>
+                {theoreticalDist && (
+                  <>
+                    {theoreticalDist.type === 'lognormal' ? (
+                      <p>
+                        Under GBM (risk-neutral), the terminal FX Spot follows a <strong>lognormal distribution</strong>:
+                        <br />
+                        ln(S_T) ~ Normal(μ = ln(S₀) + (r_dom - r_for - σ²/2)T, σ√T)
+                        <br />
+                        Parameters: μ = {theoreticalDist.mu?.toFixed(4)}, σ = {theoreticalDist.sigma?.toFixed(4)}
+                      </p>
+                    ) : (
+                      <p>
+                        Under OU, the terminal FX Spot follows a <strong>normal distribution</strong>:
+                        <br />
+                        S_T ~ Normal(mean = θ + (S₀ - θ)e^(-κT), std = √[(σ²/(2κ))(1 - e^(-2κT))])
+                        <br />
+                        Parameters: mean = {theoreticalDist.mean?.toFixed(4)}, std = {theoreticalDist.std?.toFixed(4)}
+                      </p>
+                    )}
+                    <p className="mt-2 text-sm text-gray-600">
+                      The MC paths are simulated under the risk-neutral measure. The theoretical curve is the exact analytical density at maturity, serving as a benchmark to validate the simulation.
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
