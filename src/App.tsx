@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useState } from 'react';
 import {
   LineChart,
@@ -10,7 +10,6 @@ import {
   Legend,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
   Bar,
   ComposedChart,
 } from 'recharts';
