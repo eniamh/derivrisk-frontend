@@ -13,6 +13,8 @@ import {
   Bar,
   ComposedChart,
 } from 'recharts';
+import { SimulationEnvelopeChart } from './components/charts/SimulationEnvelopeChart';
+import { TerminalDistributionPanel } from './components/charts/TerminalDistributionPanel';
 
 interface StatsPoint {
   time: number;
@@ -100,7 +102,7 @@ function App() {
 
   // OU-specific defaults
   const [ouSpot, setOuSpot] = useState(1.10);
-  const [ouKappa, setOuKappa] = useState(3.0);
+  const [ouKappa, setOuKappa] = useState(0.5);
   const [ouTheta, setOuTheta] = useState(1.10);
   const [ouSigma, setOuSigma] = useState(0.12);
 
@@ -252,6 +254,22 @@ function App() {
     };
   });
 
+  const allPvStatsWithScenario = scenarios.flatMap((label, index) => {
+    const filtered = pvStats.filter((d) => d.scenario?.includes(label)); // or your exact filter condition
+    return filtered.map(point => ({
+      ...point,                    // keep time, mean, p5, p95, etc.
+      scenario: label,             // add the scenario name as a field
+    }));
+  });
+
+  const allUnderlyingStatsWithScenario = scenarios.flatMap((label, index) => {
+    const filtered = underlyingStats.filter((d) => d.scenario?.includes(label));
+    return filtered.map(point => ({
+      ...point,
+      scenario: label,
+    }));
+  });
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -266,6 +284,20 @@ function App() {
 
             {/* FX Forward contract */}
             <div className="mb-6 space-y-4">
+              <h3 className="text-lg font-medium italic text-blue-400">Click to run the simulation with default settings or change the parameters below first</h3>
+
+              <button
+                onClick={runSensitivity}
+                disabled={loading}
+                className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors ${
+                  loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {loading ? 'Running…' : 'Run Simulation'}
+              </button>
+
               <h3 className="text-lg font-medium">FX Forward Contract</h3>
               
               <div>
@@ -338,8 +370,8 @@ function App() {
                 </label>
                 <input
                   type="number"
-                  step="0.1"
-                  min="0.1"
+                  step="0.5"
+                  min="0.5"
                   value={maturity}
                   onChange={(e) => setMaturity(Number(e.target.value))}
                   className="w-full border rounded p-2"
@@ -387,7 +419,7 @@ function App() {
             {/* ShockParam */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Parameter to shock
+                Parameter to shift
               </label>
               <div className="flex gap-6">
                 <label className="flex items-center">
@@ -467,7 +499,7 @@ function App() {
                   <label className="block text-sm mb-1">Kappa (reversion speed)</label>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.5"
                     value={ouKappa}
                     onChange={(e) => setOuKappa(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -477,7 +509,7 @@ function App() {
                   <label className="block text-sm mb-1">Theta (long-term mean)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     value={ouTheta}
                     onChange={(e) => setOuTheta(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -487,7 +519,7 @@ function App() {
                   <label className="block text-sm mb-1">Sigma (volatility)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     value={ouSigma}
                     onChange={(e) => setOuSigma(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -516,17 +548,7 @@ function App() {
               </div>
             </div>
 
-            <button
-              onClick={runSensitivity}
-              disabled={loading}
-              className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors ${
-                loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {loading ? 'Running…' : 'Run Sensitivity'}
-            </button>
+            
 
             {errorMsg && (
               <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -538,216 +560,40 @@ function App() {
           {/* Charts area */}
           <div className="lg:col-span-2 space-y-10">
             {/* Underlying FX Spot Chart */}
-            <div className="bg-white p-6 rounded-xl shadow">
-              <h2 className="text-xl font-semibold mb-4 text-center">
-                Underlying FX Spot
-              </h2>
-              <ResponsiveContainer width="100%" height={450}>
-                <LineChart margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    type="number"
-                    dataKey="time"
-                    label={{ value: 'Time (years)', position: 'insideBottom', offset: -5 }}
-                  />
-                  <YAxis label={{ value: 'FX Rate', angle: -90, position: 'insideLeft' }} />
-                  <Legend verticalAlign="top" height={70} iconType="plainline" />
-                  
-
-                  {scenarios.map((label, i) => {
-                    const color = colors[i];
-                    const filteredData = underlyingStats.filter((d) => d.scenario.includes(label));
-
-                    return (
-                      <React.Fragment key={label}>
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="mean"
-                          name={`Mean ${label}`}
-                          stroke={color}
-                          strokeWidth={2.5}
-                          dot={false}
-                          connectNulls
-                        />
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="p95"
-                          name={`95th ${label}`}
-                          stroke={color}
-                          strokeDasharray="5 5"
-                          dot={false}
-                        />
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="p5"
-                          name={`5th ${label}`}
-                          stroke={color}
-                          strokeDasharray="5 5"
-                          dot={false}
-                        />
-                      </React.Fragment>
-                    );
-                  })}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <SimulationEnvelopeChart
+              data={allUnderlyingStatsWithScenario}
+              scenarios={scenarios}
+              colors={colors}
+              title="Underlying FX Spot Paths"
+              yAxisLabel="Spot Rate"
+              caption="Mean and 5%/95% bands across scenarios"
+              valueFormatter={(v) => (v !== undefined ? v.toFixed(2) : '—')}
+            />
 
             {/* PV Chart */}
-            <div className="bg-white p-6 rounded-xl shadow">
-              <h2 className="text-xl font-semibold mb-4 text-center">
-                PV of FX Forward
-              </h2>
-              <ResponsiveContainer width="100%" height={450}>
-                <LineChart margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    type="number"
-                    dataKey="time"
-                    label={{ value: 'Time (years)', position: 'insideBottom', offset: -5 }}
-                  />
-                  <YAxis label={{ value: 'Present Value', angle: -90, position: 'insideLeft' }} />
-                  <Legend verticalAlign="top" height={70} iconType="plainline" />
-
-                  {scenarios.map((label, i) => {
-                    const color = colors[i];
-                    const filteredData = pvStats.filter((d) => d.scenario.includes(label));
-
-                    return (
-                      <React.Fragment key={label}>
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="mean"
-                          name={`Mean ${label}`}
-                          stroke={color}
-                          strokeWidth={2.5}
-                          dot={false}
-                          connectNulls
-                        />
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="p95"
-                          name={`95th ${label}`}
-                          stroke={color}
-                          strokeDasharray="5 5"
-                          dot={false}
-                        />
-                        <Line
-                          type="monotone"
-                          data={filteredData}
-                          dataKey="p5"
-                          name={`5th ${label}`}
-                          stroke={color}
-                          strokeDasharray="5 5"
-                          dot={false}
-                        />
-                      </React.Fragment>
-                    );
-                  })}
-                </LineChart>
-              </ResponsiveContainer>
-              <p className="text-center text-sm text-gray-500 mt-3">
-                Plots show the impact of the selected shock applied to{' '}
-                <span className="font-medium">
-                  {shockParam === 'spot' ? 'initial FX Spot' : 'volatility'}
-                </span>
-              </p>
-            </div>
+            <SimulationEnvelopeChart
+              data={allPvStatsWithScenario}
+              scenarios={scenarios}
+              colors={colors}                     // your array of colors, length === scenarios.length
+              title="PV of FX Forward"
+              yAxisLabel="Present Value"
+              caption={`Plots show the impact of the selected shift applied to ${
+                shockParam === 'spot' ? 'initial FX Spot' : 'volatility'
+              }`}
+              valueFormatter={(v) =>
+                v !== undefined
+                  ? Math.round(v).toLocaleString('en-US')  // rounds to integer + adds commas
+                  : '—'
+              }
+            />
 
             {/* Comparison of realised and theoretical distributions */}
-            <div className="bg-white p-6 rounded-xl shadow">
-              <h2 className="text-xl font-semibold mb-4 text-center">
-                FX Spot at Maturity: MC vs Theoretical Distribution (Base Scenario)
-              </h2>
-
-              {/* Debug count */}
-              <p className="text-center text-sm text-gray-600 mb-4">
-                {mcTerminalPrices[1]?.length || 0} terminal prices in base scenario
-              </p>
-
-              <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart
-                  data={mergedData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-
-                  <XAxis
-                    dataKey="binCenter"
-                    type="number"
-                    // Remove scale="band" — let it be continuous numeric
-                    domain={['dataMin', 'dataMax']}           // Ensures full range coverage
-                    padding={{ left: 30, right: 30 }}          // ← Key: Adds space on edges so first/last bars aren't cut off + gives room for all bars
-                    tickCount={10}                             // Optional: nicer tick spacing
-                    // tickFormatter={(val) => val.toFixed(2)} // Optional: clean up labels if too many decimals
-                  />
-
-                  <YAxis yAxisId="left" orientation="left" label={{ value: 'Frequency', angle: -90, position: 'insideLeft' }} />
-                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Density', angle: 90, position: 'insideRight' }} />
-
-                  <Bar
-                    yAxisId="left"
-                    dataKey="count"
-                    fill="#8884d8"
-                    barSize={Math.max(4, (window.innerWidth * 0.8) / mergedData.length / 2)}  // Dynamic: ~half the available slot per bin
-                    // or fixed: barSize={12}  // Start with 8–20 px, adjust based on bin count (30 bins → ~10–15 px good)
-                    minPointSize={2}           // Ensures tiny counts (e.g. 1–2) are still visible
-                    isAnimationActive={false}
-                  />
-
-                  {/* Your Line remains the same */}
-                  {theoreticalDist && mcTerminalPrices?.[1]?.length > 0 && (
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="density"
-                      name="Theoretical Density"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      dot={false}
-                      strokeDasharray="5 5"
-                      isAnimationActive={false}
-                    />
-                  )}
-
-                  <Tooltip />
-                  <Legend />
-                </ComposedChart>
-              </ResponsiveContainer>
-
-              {/* Text panel */}
-              <div className="mt-6 p-4 bg-gray-50 border rounded-lg">
-                <h3 className="text-lg font-medium mb-2">Theoretical Distribution at Maturity (Base Case)</h3>
-                {theoreticalDist && (
-                  <>
-                    {theoreticalDist.type === 'lognormal' ? (
-                      <p>
-                        Under GBM (risk-neutral), the terminal FX Spot follows a <strong>lognormal distribution</strong>:
-                        <br />
-                        ln(S_T) ~ Normal(μ = ln(S₀) + (r_dom - r_for - σ²/2)T, σ√T)
-                        <br />
-                        Parameters: μ = {theoreticalDist.mu?.toFixed(4)}, σ = {theoreticalDist.sigma?.toFixed(4)}
-                      </p>
-                    ) : (
-                      <p>
-                        Under OU, the terminal FX Spot follows a <strong>normal distribution</strong>:
-                        <br />
-                        S_T ~ Normal(mean = θ + (S₀ - θ)e^(-κT), std = √[(σ²/(2κ))(1 - e^(-2κT))])
-                        <br />
-                        Parameters: mean = {theoreticalDist.mean?.toFixed(4)}, std = {theoreticalDist.std?.toFixed(4)}
-                      </p>
-                    )}
-                    <p className="mt-2 text-sm text-gray-600">
-                      The MC paths are simulated under the risk-neutral measure. The theoretical curve is the exact analytical density at maturity, serving as a benchmark to validate the simulation.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
+            <TerminalDistributionPanel
+              mergedData={mergedData}                 
+              theoreticalDist={theoreticalDist}          
+              mcTerminalPrices={mcTerminalPrices}        
+              // title="Custom title if you want to override" (optional)
+            />
           </div>
         </div>
       </div>
@@ -755,7 +601,5 @@ function App() {
   );
 }
 
-//const scenarios = ['Down', 'Base', 'Up'];
-//const colors = ['#ef4444', '#3b82f6', '#10b981'];
 
 export default App;
