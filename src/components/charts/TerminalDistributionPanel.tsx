@@ -128,7 +128,7 @@ export const TerminalDistributionPanel: React.FC<TerminalDistributionPanelProps>
           <>
             {explanation()}
             <p className="mt-2 text-sm text-gray-600">
-              The MC paths are simulated under the risk-neutral measure. The theoretical curve is the exact analytical density at maturity, serving as a benchmark to validate the simulation.
+              The theoretical curve is the exact analytical density at maturity, serving as a benchmark to validate the simulation.
             </p>
           </>
         ) : (

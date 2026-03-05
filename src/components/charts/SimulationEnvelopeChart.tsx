@@ -41,7 +41,7 @@ export const SimulationEnvelopeChart: React.FC<SimulationEnvelopeChartProps> = (
   valueFormatter = (v) => (v !== undefined ? v.toFixed(4) : '—'),
 }) => {
   if (!data?.length || !scenarios.length) {
-    return <div className="text-center text-gray-500 py-10">Run simulation to view chart</div>;
+    return <div className="text-center text-gray-500 py-10">Chart will appear here</div>;
   }
 
   return (

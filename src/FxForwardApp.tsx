@@ -91,9 +91,9 @@ function App() {
 
   // OU-specific defaults
   const [ouSpot, setOuSpot] = useState(1.10);
-  const [ouKappa, setOuKappa] = useState(0.5);
+  const [ouKappa, setOuKappa] = useState(1.0);
   const [ouTheta, setOuTheta] = useState(1.10);
-  const [ouSigma, setOuSigma] = useState(0.12);
+  const [ouSigma, setOuSigma] = useState(0.15);
 
   // Sensitivity controls
   const [shockParam, setShockParam] = useState<'spot' | 'vol'>('spot');
@@ -146,7 +146,7 @@ function App() {
         const currentVol = shockParam === 'vol' ? baseVol * factor : baseVol;
 
         let url = `${API_BASE}/api/simulation/fx-forward-paths?`;
-        url += `model=${modelType}&paths=200&steps=200&maturity=${maturity}`;
+        url += `model=${modelType}&paths=1000&steps=200&maturity=${maturity}`;
         url += `&r_dom=${r_dom}&r_for=${r_for}&spot=${currentSpot.toFixed(6)}`;
         url += `&strike=${strike.toFixed(6)}&notional=${notional}&direction=${direction}`;
 
@@ -372,7 +372,7 @@ function App() {
                 </label>
                 <input
                   type="number"
-                  step="0.001"
+                  step="0.01"
                   value={r_dom}
                   onChange={(e) => setR_dom(Number(e.target.value))}
                   className="w-full border rounded p-2"
@@ -384,7 +384,7 @@ function App() {
                 </label>
                 <input
                   type="number"
-                  step="0.001"
+                  step="0.01"
                   value={r_for}
                   onChange={(e) => setR_for(Number(e.target.value))}
                   className="w-full border rounded p-2"
@@ -444,7 +444,7 @@ function App() {
                   <label className="block text-sm mb-1">Initial spot</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.05"
                     value={gbmSpot}
                     onChange={(e) => setGbmSpot(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -454,7 +454,7 @@ function App() {
                   <label className="block text-sm mb-1">Volatility (σ)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.05"
                     value={gbmSigma}
                     onChange={(e) => setGbmSigma(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -464,7 +464,7 @@ function App() {
                   <label className="block text-sm mb-1">Drift (μ)</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.05"
                     value={gbmMu}
                     onChange={(e) => setGbmMu(Number(e.target.value))}
                     className="w-full border rounded p-2"
@@ -508,7 +508,7 @@ function App() {
                   <label className="block text-sm mb-1">Sigma (volatility)</label>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.5"
                     value={ouSigma}
                     onChange={(e) => setOuSigma(Number(e.target.value))}
                     className="w-full border rounded p-2"
