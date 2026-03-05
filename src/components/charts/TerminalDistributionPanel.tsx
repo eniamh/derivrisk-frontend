@@ -1,5 +1,5 @@
 // src/components/charts/TerminalDistributionPanel.tsx
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   ComposedChart,
   Bar,

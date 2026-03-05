@@ -1,18 +1,7 @@
 // src/App.tsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Legend,
-  Tooltip,
-  ResponsiveContainer,
-  Bar,
-  ComposedChart,
-} from 'recharts';
+
 import { SimulationEnvelopeChart } from './components/charts/SimulationEnvelopeChart';
 import { TerminalDistributionPanel } from './components/charts/TerminalDistributionPanel';
 
@@ -254,7 +243,7 @@ function App() {
     };
   });
 
-  const allPvStatsWithScenario = scenarios.flatMap((label, index) => {
+  const allPvStatsWithScenario = scenarios.flatMap((label) => {
     const filtered = pvStats.filter((d) => d.scenario?.includes(label)); // or your exact filter condition
     return filtered.map(point => ({
       ...point,                    // keep time, mean, p5, p95, etc.
@@ -262,7 +251,7 @@ function App() {
     }));
   });
 
-  const allUnderlyingStatsWithScenario = scenarios.flatMap((label, index) => {
+  const allUnderlyingStatsWithScenario = scenarios.flatMap((label) => {
     const filtered = underlyingStats.filter((d) => d.scenario?.includes(label));
     return filtered.map(point => ({
       ...point,
