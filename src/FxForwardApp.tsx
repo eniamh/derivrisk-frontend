@@ -146,7 +146,7 @@ function App() {
         const currentVol = shockParam === 'vol' ? baseVol * factor : baseVol;
 
         let url = `${API_BASE}/api/simulation/fx-forward-paths?`;
-        url += `model=${modelType}&paths=1000&steps=200&maturity=${maturity}`;
+        url += `model=${modelType}&paths=250&steps=200&maturity=${maturity}`;
         url += `&r_dom=${r_dom}&r_for=${r_for}&spot=${currentSpot.toFixed(6)}`;
         url += `&strike=${strike.toFixed(6)}&notional=${notional}&direction=${direction}`;
 
