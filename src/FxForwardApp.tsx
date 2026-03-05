@@ -93,7 +93,7 @@ function App() {
   const [ouSpot, setOuSpot] = useState(1.10);
   const [ouKappa, setOuKappa] = useState(1.0);
   const [ouTheta, setOuTheta] = useState(1.10);
-  const [ouSigma, setOuSigma] = useState(0.15);
+  const [ouSigma, setOuSigma] = useState(0.3);
 
   // Sensitivity controls
   const [shockParam, setShockParam] = useState<'spot' | 'vol'>('spot');
@@ -508,7 +508,7 @@ function App() {
                   <label className="block text-sm mb-1">Sigma (volatility)</label>
                   <input
                     type="number"
-                    step="0.5"
+                    step="0.05"
                     value={ouSigma}
                     onChange={(e) => setOuSigma(Number(e.target.value))}
                     className="w-full border rounded p-2"
